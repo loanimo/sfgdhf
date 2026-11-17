@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Royal Win Lottery & Scratch Portal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Hind+Siliguri:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Hind Siliguri', sans-serif;
+            background: radial-gradient(circle at top right, #064e3b 0%, #070d1f 55%, #020617 100%);
+            color: #f8fafc;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .text-gold-gradient {
+            background: linear-gradient(135deg, #fef08a 0%, #f59e0b 50%, #d97706 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .btn-gold {
+            background: linear-gradient(135deg, #fbbf24 0%, #d97706 100%);
+            color: #090d16;
+            font-weight: 700;
+            box-shadow: 0 4px 16px rgba(245, 158, 11, 0.35);
+            transition: all 0.25s ease;
+        }
+        .btn-gold:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 24px rgba(245, 158, 11, 0.55);
+            filter: brightness(1.06);
+        }
+
+        .glass-card {
+            background: rgba(11, 18, 36, 0.82);
+            backdrop-filter: blur(14px);
+            border: 1px solid rgba(251, 191, 36, 0.22);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+        }
+
+        /* Scratch Card Styling */
+        .scratch-card-wrapper {
+            position: relative;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+            overflow: hidden;
+            border-radius: 1rem;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.45);
+        }
+        .scratch-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+            z-index: 10;
+            transition: opacity 0.45s ease;
+        }
+
+        @keyframes flowerFall {
+            0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(110vh) rotate(360deg); opacity: 0; }
+        }
+        .falling-petal {
+            position: fixed;
+            top: -50px;
+            z-index: 9999;
+            pointer-events: none;
+            animation: flowerFall linear forwards;
+        }
+
+        @keyframes marquee {
+            0% { transform: translateX(100%); }
+            100% { transform: translateX(-100%); }
+        }
+        .animate-marquee {
+            display: inline-block;
+            white-space: nowrap;
+            animation: marquee 26s linear infinite;
+        }
+
+        .certificate-paper {
+            background: linear-gradient(135deg, #fffdf7 0%, #fef9e7 50%, #fdf3d0 100%);
+            color: #1e293b;
+            border: 12px double #b45309;
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.75);
+        }
+
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #070d1f; }
+        ::-webkit-scrollbar-thumb { background: #d97706; border-radius: 3px; }
+    </style>
+</head>
+<body class="antialiased selection:bg-amber-500 selection:text-slate-950">
+
+    <div id="flower-rain-layer" class="fixed inset-0 pointer-events-none z-50 overflow-hidden"></div>
+    <div id="toast-container" class="fixed top-20 right-4 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none"></div>
+
+    <!-- GLOBAL AUDIO & UTILS -->
+    <script>
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playNotificationBell() {
+            try {
+                if(audioCtx.state === 'suspended') audioCtx.resume();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.3);
+                gain.gain.setValueAtTime(0.7, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.3);
+            } catch(e) {}
+        }
+
+        function playScratchSound() {
+            try {
+                if(audioCtx.state === 'suspended') audioCtx.resume();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(180, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.1);
+            } catch(e) {}
+        }
+
+        function playWinFanfare() {
+            try {
+                if(audioCtx.state === 'suspended') audioCtx.resume();
+                const now = audioCtx.currentTime;
+                [523.25, 659.25, 783.99, 1046.50].forEach((freq, idx) => {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.type = 'triangle';
+                    osc.frequency.setValueAtTime(freq, now + (idx * 0.12));
+                    gain.gain.setValueAtTime(0.6, now + (idx * 0.12));
+                    gain.gain.exponentialRampToValueAtTime(0.01, now + (idx * 0.12) + 0.35);
+                    osc.connect(gain); gain.connect(audioCtx.destination);
+                    osc.start(now + (idx * 0.12)); osc.stop(now + (idx * 0.12) + 0.35);
+                });
+            } catch(e) {}
+        }
+
+        function triggerFlowerRain(count = 25) {
+            const container = document.getElementById('flower-rain-layer');
+            if(!container) return;
+            const emojis = ['🌸', '🌺', '🌼', '✨', '💐', '🎉'];
+            for(let i=0; i<count; i++) {
+                const span = document.createElement('span');
+                span.className = 'falling-petal';
+                span.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+                span.style.left = Math.random() * window.innerWidth + 'px';
+                span.style.fontSize = (Math.random() * 24 + 16) + 'px';
+                span.style.animationDuration = (Math.random() * 2 + 2) + 's';
+                container.appendChild(span);
+                setTimeout(() => span.remove(), 4000);
+            }
+        }
+
+        function formatBDT(amount) {
+            return '৳ ' + Number(amount || 0).toLocaleString('en-IN');
+        }
+
+        function toBn(input) {
+            if(input === undefined || input === null) return '';
+            const englishDigits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+            const banglaDigits = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
+            return String(input).split('').map(char => {
+                const idx = englishDigits.indexOf(char);
+                return idx !== -1 ? banglaDigits[idx] : char;
+            }).join('');
+        }
+
+        function getTodayBnDate() {
+            const d = new Date();
+            const months = ['জানুয়ারি', 'ফেব্রুয়ারি', 'মার্চ', 'এপ্রিল', 'মে', 'জুন', 'জুলাই', 'আগস্ট', 'সেপ্টেম্বর', 'অক্টোবর', 'নভেম্বর', 'ডিসেম্বর'];
+            return `${toBn(d.getDate())} ${months[d.getMonth()]} , ${toBn(d.getFullYear())}`;
+        }
+    </script>
+
+    <!-- VIEW 1: USER MAIN PORTAL -->
+    <div id="user-portal-view" class="min-h-screen flex flex-col justify-between">
+        <div>
+            <!-- Header -->
+            <header class="glass-card sticky top-0 z-40 border-b border-amber-500/20 px-4 py-3 flex items-center justify-between shadow-xl">
+                <div class="flex items-center gap-3 cursor-pointer" onclick="openHiddenAdminPortal()">
+                    <div class="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 font-extrabold flex items-center justify-center shadow-lg">
+                        <i data-lucide="crown" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-base sm:text-lg font-extrabold text-gold-gradient tracking-wide">রয়্যাল উইন লটারি</h1>
+                        <p class="text-[10px] text-slate-400">অফিশিয়াল স্ক্র্যাচ ও জ্যাকপট পোর্টাল</p>
+                    </div>
+                </div>
+
+                <div class="flex items-center gap-3">
+                    <div id="header-user-pill" class="hidden items-center gap-2 bg-slate-900/90 border border-emerald-500/40 px-3 py-1.5 rounded-xl">
+                        <span id="header-user-name" class="text-xs font-bold text-white"></span>
+                        <button onclick="logoutClient()" class="text-rose-400 hover:text-rose-300 ml-2">
+                            <i data-lucide="log-out" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                    <button id="header-login-btn" onclick="openClientAuthModal()" class="btn-gold px-4 py-2 rounded-xl text-xs sm:text-sm flex items-center gap-2">
+                        <i data-lucide="log-in" class="w-4 h-4"></i> ক্লায়েন্ট লগইন
+                    </button>
+                </div>
+            </header>
+
+            <!-- Notice -->
+            <div class="bg-slate-950 border-b border-amber-500/20 py-2 px-4 overflow-hidden relative">
+                <div class="flex items-center gap-3">
+                    <span class="bg-amber-500 text-slate-950 font-extrabold text-xs px-2.5 py-0.5 rounded-md shrink-0 flex items-center gap-1">
+                        <i data-lucide="bell" class="w-3.5 h-3.5"></i> ঘোষণা:
+                    </span>
+                    <div class="overflow-hidden whitespace-nowrap w-full">
+                        <p id="global-notice-text" class="animate-marquee text-xs sm:text-sm text-amber-300 font-medium"></p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main -->
+            <main class="container mx-auto px-4 py-6 max-w-6xl space-y-8">
+                <!-- Stats -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div class="glass-card rounded-2xl p-4 border border-amber-500/20">
+                        <span class="text-[11px] text-slate-400 block">মোট মেম্বার</span>
+                        <strong id="stat-disp-members" class="text-base sm:text-lg font-bold text-white">৪৬,৫২০+ জন</strong>
+                    </div>
+                    <div class="glass-card rounded-2xl p-4 border border-emerald-500/20">
+                        <span class="text-[11px] text-slate-400 block">অনলাইন</span>
+                        <strong id="stat-disp-online" class="text-base sm:text-lg font-bold text-emerald-400">১,২৪৫ জন</strong>
+                    </div>
+                    <div class="glass-card rounded-2xl p-4 border border-sky-500/20">
+                        <span class="text-[11px] text-slate-400 block">মোট ডিপোজিট</span>
+                        <strong id="stat-disp-deposit" class="text-base sm:text-lg font-bold text-sky-300">৳ ২,৪৫,৮০,০০০+</strong>
+                    </div>
+                    <div class="glass-card rounded-2xl p-4 border border-purple-500/20">
+                        <span class="text-[11px] text-slate-400 block">মোট পেমেন্ট</span>
+                        <strong id="stat-disp-withdraw" class="text-base sm:text-lg font-bold text-purple-300">৳ ১,৮৯,০৫,০০০+</strong>
+                    </div>
+                </div>
+
+                <!-- Activation Code Box -->
+                <div class="glass-card rounded-3xl p-6 sm:p-8 border border-amber-500/40 text-center space-y-4">
+                    <h2 class="text-2xl font-extrabold text-white">অ্যাক্টিভেশন কোড দিয়ে গেম আনলক করুন</h2>
+                    <div class="flex flex-col sm:flex-row gap-3 max-w-xl mx-auto">
+                        <input type="text" id="activation-code-input" placeholder="কোড লিখুন (যেমন: WIN-1299)" class="flex-1 px-4 py-3.5 rounded-2xl bg-slate-950 border border-amber-500/50 text-amber-300 font-mono uppercase text-center sm:text-left">
+                        <button onclick="submitActivationCode()" class="btn-gold px-8 py-3.5 rounded-2xl text-sm font-bold flex items-center justify-center gap-2">
+                            <i data-lucide="play-circle" class="w-5 h-5"></i> কোড দিয়ে খেলুন
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Resumable Games -->
+                <div id="resumable-games-section" class="hidden glass-card rounded-2xl p-6 border border-emerald-500/40 space-y-3">
+                    <h3 class="text-base font-bold text-emerald-400">আপনার সংরক্ষিত ও চলমান গেম সেশন</h3>
+                    <div id="resumable-games-list" class="grid grid-cols-1 sm:grid-cols-2 gap-3"></div>
+                </div>
+
+                <!-- SCRATCH ARENA -->
+                <div id="scratch-game-arena" class="hidden glass-card rounded-3xl p-6 sm:p-8 border-2 border-amber-400 space-y-6">
+                    <div class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4">
+                        <div>
+                            <span id="active-session-code-badge" class="px-3 py-1 rounded-full text-xs font-mono font-bold bg-amber-500/20 text-amber-300"></span>
+                            <h3 id="active-pkg-title" class="text-2xl font-extrabold text-white mt-1"></h3>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-xs text-slate-400 block">মোট জেতা টাকা</span>
+                            <div id="total-won-amount" class="text-2xl font-extrabold text-emerald-400">৳ ০</div>
+                        </div>
+                    </div>
+                    <div id="scratch-cards-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4"></div>
+                    <div class="flex justify-between items-center pt-4 border-t border-slate-800">
+                        <button onclick="revealAllCards()" class="bg-slate-800 hover:bg-slate-700 text-amber-300 px-5 py-3 rounded-xl text-xs font-bold">সবগুলো কার্ড একসাথে খুলুন</button>
+                        <button onclick="openWithdrawModal()" class="btn-gold px-8 py-3.5 rounded-xl text-sm font-bold">টাকা উইথড্র ও সার্টিফিকেট নিন</button>
+                    </div>
+                </div>
+
+                <!-- Packages Grid -->
+                <div class="space-y-4">
+                    <h2 class="text-2xl font-extrabold text-white text-center">লটারি প্যাকেজসমূহ</h2>
+                    <div id="packages-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+                </div>
+
+                <!-- Client Requests Tracker -->
+                <div class="glass-card rounded-3xl p-6 sm:p-8 border border-amber-500/30 space-y-6">
+                    <h3 class="text-xl font-bold text-amber-300">আপনার ডিপোজিট ও উইথড্র হিস্ট্রি</h3>
+                    <div id="client-withdrawals-list" class="space-y-3"></div>
+                </div>
+            </main>
+        </div>
+
+        <!-- Chat Widget Button -->
+        <div class="fixed bottom-6 right-6 z-40">
+            <button onclick="toggleChatWidget()" class="w-14 h-14 rounded-full btn-gold shadow-2xl flex items-center justify-center text-slate-950 relative">
+                <i data-lucide="message-square-quote" class="w-7 h-7"></i>
+                <span id="chat-unread-badge" class="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-rose-600 text-white text-[10px] font-bold flex items-center justify-center hidden">০</span>
+            </button>
+        </div>
+
+        <!-- Client Chat Modal -->
+        <div id="client-chat-box" class="hidden fixed bottom-24 right-6 z-50 w-80 sm:w-96 glass-card rounded-2xl border border-amber-500/40 shadow-2xl overflow-hidden flex flex-col h-[460px]">
+            <div class="bg-slate-950 p-3.5 border-b border-slate-800 flex items-center justify-between">
+                <h4 class="text-xs font-bold text-white">লাইভ অ্যাডমিন চ্যাট ও এসএমএস ইনবক্স</h4>
+                <button onclick="toggleChatWidget()" class="text-slate-400 hover:text-white"><i data-lucide="x" class="w-4 h-4"></i></button>
+            </div>
+            <div class="bg-slate-900/90 p-2.5 border-b border-slate-800 grid grid-cols-2 gap-2 text-xs">
+                <input type="text" id="chat-sender-name" placeholder="নাম" class="bg-slate-950 px-2.5 py-1.5 rounded-lg text-white">
+                <input type="tel" id="chat-sender-phone" placeholder="মোবাইল নম্বর" class="bg-slate-950 px-2.5 py-1.5 rounded-lg text-amber-300 font-mono">
+            </div>
+            <div id="client-chat-messages" class="flex-1 overflow-y-auto p-3 space-y-3 text-xs bg-slate-950/40"></div>
+            <form onsubmit="sendClientChatMessage(event)" class="p-3 bg-slate-950 border-t border-slate-800 flex gap-2">
+                <input type="text" id="client-chat-input" placeholder="মেসেজ লিখুন..." class="flex-1 bg-slate-900 px-3 py-2 rounded-xl text-xs text-white">
+                <button type="submit" class="btn-gold px-3.5 py-2 rounded-xl text-xs font-bold">পাঠান</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- VIEW 2: HIDDEN ADMIN PANEL (PASSWORD: 01941225679) -->
+    <div id="admin-portal-view" class="hidden min-h-screen bg-slate-950 text-slate-100 flex flex-col">
+        <header class="bg-slate-900 border-b border-slate-800 px-4 py-3 flex items-center justify-between sticky top-0 z-50">
+            <h2 class="text-sm font-extrabold text-amber-400">অ্যাডমিন কন্ট্রোল প্যানেল</h2>
+            <div class="flex items-center gap-2">
+                <button onclick="lockAdminSession()" class="bg-slate-800 text-amber-300 px-3 py-1.5 rounded-xl text-xs font-bold">লক করুন</button>
+                <button onclick="exitHiddenAdminView()" class="bg-rose-950 text-rose-300 px-3 py-1.5 rounded-xl text-xs font-bold">হোম</button>
+            </div>
+        </header>
+
+        <div id="admin-login-gate" class="flex-1 flex items-center justify-center p-4">
+            <div class="glass-card max-w-md w-full rounded-3xl p-8 border border-amber-500/40 text-center space-y-6">
+                <h3 class="text-xl font-bold text-white">অ্যাডমিন পাসওয়ার্ড দিন</h3>
+                <form onsubmit="loginAdminWithPassword(event)" class="space-y-4">
+                    <input type="password" id="admin-secret-password-input" required placeholder="পাসওয়ার্ড লিখুন..." class="w-full px-4 py-3 rounded-xl bg-slate-900 border border-slate-700 text-center text-amber-300 font-mono">
+                    <button type="submit" class="w-full btn-gold py-3.5 rounded-xl text-sm font-bold">আনলক করুন</button>
+                </form>
+            </div>
+        </div>
+
+        <div id="admin-workspace" class="hidden flex-1 container mx-auto px-4 py-6 max-w-7xl space-y-6 overflow-y-auto">
+            <div class="flex gap-2 bg-slate-900 p-2 rounded-2xl border border-slate-800">
+                <button onclick="switchAdminTab('chat')" class="adm-tab-btn px-4 py-2 rounded-xl text-sm font-semibold bg-amber-500 text-slate-950" id="adm-btn-chat">চ্যাট ও ইনবক্স</button>
+                <button onclick="switchAdminTab('codes')" class="adm-tab-btn px-4 py-2 rounded-xl text-sm font-semibold bg-slate-900 text-slate-300" id="adm-btn-codes">কোড ও ডিপোজিট</button>
+                <button onclick="switchAdminTab('withdrawals')" class="adm-tab-btn px-4 py-2 rounded-xl text-sm font-semibold bg-slate-900 text-slate-300" id="adm-btn-withdrawals">উইথড্র</button>
+            </div>
+
+            <!-- TAB: CHAT -->
+            <div id="adm-tab-chat" class="grid grid-cols-1 lg:grid-cols-3 gap-6 bg-slate-900/60 p-4 rounded-2xl border border-slate-800">
+                <div class="space-y-3">
+                    <h4 class="text-sm font-bold text-white">ইউজার চ্যাট লিস্ট</h4>
+                    <div id="adm-chat-threads" class="space-y-2 h-[420px] overflow-y-auto"></div>
+                </div>
+                <div class="lg:col-span-2 flex flex-col bg-slate-950 rounded-2xl border border-slate-800 h-[520px]">
+                    <div id="adm-chat-header" class="p-3.5 border-b border-slate-800"></div>
+                    <div id="adm-chat-messages" class="flex-1 overflow-y-auto p-4 space-y-3 text-xs"></div>
+                    <div class="bg-slate-900 p-3 border-t border-slate-800 flex flex-wrap items-center gap-2">
+                        <select id="adm-chat-pkg-select" class="bg-slate-950 border border-slate-700 text-xs text-white px-2 py-1.5 rounded-lg"></select>
+                        <button onclick="adminGenerateCodeInChat()" class="btn-gold px-3 py-1.5 rounded-lg text-xs font-bold">কোড তৈরি করে চ্যাটে পাঠান</button>
+                    </div>
+                    <form onsubmit="sendAdminChatReply(event)" class="p-3 bg-slate-950 border-t border-slate-800 flex gap-2">
+                        <input type="text" id="adm-chat-reply-input" placeholder="অ্যাডমিন মেসেজ..." class="flex-1 bg-slate-900 px-3 py-2 rounded-xl text-xs text-white">
+                        <button type="submit" class="btn-gold px-4 py-2 rounded-xl text-xs font-bold">পাঠান</button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- TAB: CODES & DEPOSITS -->
+            <div id="adm-tab-codes" class="hidden space-y-4">
+                <div class="bg-slate-900/60 p-4 rounded-2xl border border-slate-800 overflow-x-auto">
+                    <h4 class="text-sm font-bold text-white mb-3">ডিপোজিট ও কোডের আবেদন</h4>
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-950 text-slate-400">
+                            <tr>
+                                <th class="py-2 px-3">নাম ও ফোন</th>
+                                <th class="py-2 px-3">প্যাকেজ</th>
+                                <th class="py-2 px-3">নোট</th>
+                                <th class="py-2 px-3 text-right">অ্যাকশন</th>
+                            </tr>
+                        </thead>
+                        <tbody id="adm-requests-tbody" class="divide-y divide-slate-800"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- TAB: WITHDRAWALS -->
+            <div id="adm-tab-withdrawals" class="hidden bg-slate-900/60 p-4 rounded-2xl border border-slate-800 overflow-x-auto">
+                <h4 class="text-sm font-bold text-white mb-3">উইথড্র আবেদন</h4>
+                <table class="w-full text-left text-xs">
+                    <thead class="bg-slate-950 text-slate-400">
+                        <tr>
+                            <th class="py-2 px-3">গ্রাহক</th>
+                            <th class="py-2 px-3">বিবরণ</th>
+                            <th class="py-2 px-3">টাকা</th>
+                            <th class="py-2 px-3 text-right">স্ট্যাটাস</th>
+                        </tr>
+                    </thead>
+                    <tbody id="adm-withdrawals-tbody" class="divide-y divide-slate-800"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODALS -->
+    <div id="client-auth-modal" class="fixed inset-0 z-50 hidden bg-black/80 flex items-center justify-center p-4">
+        <div class="glass-card max-w-md w-full rounded-3xl p-6 border border-amber-500/40 space-y-4 relative">
+            <button onclick="closeModal('client-auth-modal')" class="absolute top-4 right-4 text-slate-400"><i data-lucide="x" class="w-5 h-5"></i></button>
+            <h3 class="text-xl font-bold text-white text-center">লগইন বা রেজিস্ট্রেশন</h3>
+            <div class="grid grid-cols-2 gap-2 bg-slate-950 p-1 rounded-xl">
+                <button onclick="switchAuthTab('login')" class="py-2 rounded-lg text-xs font-bold bg-amber-500 text-slate-950" id="auth-tab-l">লগইন</button>
+                <button onclick="switchAuthTab('reg')" class="py-2 rounded-lg text-xs font-bold text-slate-300" id="auth-tab-r">রেজিস্ট্রেশন</button>
+            </div>
+            <form id="auth-form-login" onsubmit="handleStrictLogin(event)" class="space-y-3">
+                <input type="tel" id="login-phone" required placeholder="মোবাইল নম্বর (017...)" class="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-amber-300">
+                <input type="password" id="login-pass" required placeholder="পাসওয়ার্ড" class="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white">
+                <button type="submit" class="w-full btn-gold py-3 rounded-xl text-sm font-bold">লগইন করুন</button>
+            </form>
+            <form id="auth-form-reg" onsubmit="handleStrictRegister(event)" class="hidden space-y-3">
+                <input type="text" id="reg-name" required placeholder="পূর্ণ নাম" class="w-full px-4 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white">
+                <input type="tel" id="reg-phone" required placeholder="মোবাইল নম্বর" class="w-full px-4 py-2 rounded-xl bg-slate-950 border border-slate-700 text-amber-300">
+                <input type="password" id="reg-pass" required placeholder="পাসওয়ার্ড" class="w-full px-4 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white">
+                <button type="submit" class="w-full btn-gold py-3 rounded-xl text-sm font-bold">অ্যাকাউন্ট খুলুন</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="deposit-request-modal" class="fixed inset-0 z-50 hidden bg-black/80 flex items-center justify-center p-4">
+        <div class="glass-card max-w-lg w-full rounded-3xl p-6 border border-amber-500/40 space-y-4 relative">
+            <button onclick="closeModal('deposit-request-modal')" class="absolute top-4 right-4 text-slate-400"><i data-lucide="x" class="w-5 h-5"></i></button>
+            <h3 class="text-xl font-bold text-white text-center">ডিপোজিট আবেদন</h3>
+            <form onsubmit="submitDepositRequest(event)" class="space-y-3">
+                <select id="dep-pkg" class="w-full p-2.5 rounded-xl bg-slate-950 text-white border border-slate-700"></select>
+                <input type="text" id="dep-name" required placeholder="আপনার নাম" class="w-full p-2.5 rounded-xl bg-slate-950 text-white border border-slate-700">
+                <input type="tel" id="dep-phone" required placeholder="মোবাইল নম্বর" class="w-full p-2.5 rounded-xl bg-slate-950 text-amber-300 border border-slate-700">
+                <input type="text" id="dep-trx" required placeholder="বিকাশ/নগদ TrxID বা নোট" class="w-full p-2.5 rounded-xl bg-slate-950 text-white border border-slate-700">
+                <button type="submit" class="w-full btn-gold py-3 rounded-xl font-bold">আবেদন জমা দিন</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="withdraw-modal" class="fixed inset-0 z-50 hidden bg-black/80 flex items-center justify-center p-4">
+        <div class="glass-card max-w-lg w-full rounded-3xl p-6 border border-amber-500/40 space-y-4 relative">
+            <button onclick="closeModal('withdraw-modal')" class="absolute top-4 right-4 text-slate-400"><i data-lucide="x" class="w-5 h-5"></i></button>
+            <h3 class="text-xl font-bold text-white text-center">উইথড্র ফর্ম</h3>
+            <form onsubmit="submitWithdraw(event)" class="space-y-3">
+                <input type="text" id="wd-name" required placeholder="নাম" class="w-full p-2.5 rounded-xl bg-slate-950 text-white border border-slate-700">
+                <input type="tel" id="wd-phone" required placeholder="মোবাইল নম্বর" class="w-full p-2.5 rounded-xl bg-slate-950 text-amber-300 border border-slate-700">
+                <input type="text" id="wd-acc" required placeholder="বিকাশ/ব্যাংক অ্যাকাউন্ট নম্বর" class="w-full p-2.5 rounded-xl bg-slate-950 text-white border border-slate-700">
+                <button type="submit" class="w-full btn-gold py-3 rounded-xl font-bold">উইথড্র নিশ্চিত করুন</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- SCRIPT & CORE ENGINE -->
+    <script>
+        let store = JSON.parse(localStorage.getItem('rw_master_portal_v5')) || {
+            settings: { adminPassword: "01941225679", notice: "স্বাগতম! লগইন করে প্যাকেজ সিলেক্ট করুন।" },
+            packages: [
+                { id: 1, name: "প্যাকেজ ১: স্টার্টার প্যাক", price: 1299, cards: 8, minWin: 1000000, maxWin: 1500000 },
+                { id: 2, name: "প্যাকেজ ২: সিলভার প্যাক", price: 2999, cards: 12, minWin: 1800000, maxWin: 2500000 },
+                { id: 3, name: "প্যাকেজ ৩: গোল্ডেন প্যাক", price: 5999, cards: 16, minWin: 3000000, maxWin: 5000000 }
+            ],
+            clients: {},
+            codes: {},
+            sessions: {},
+            requests: [],
+            withdrawals: [],
+            chats: {}
+        };
+
+        let currentUserPhone = localStorage.getItem('rw_current_client_phone') || "";
+        let currentSessionId = null;
+        let isAdminAuthenticated = sessionStorage.getItem('rw_admin_unlocked') === 'true';
+        let activeAdminChatPhone = "";
+
+        function persistStore() {
+            localStorage.setItem('rw_master_portal_v5', JSON.stringify(store));
+        }
+
+        function showToast(msg, type='info') {
+            playNotificationBell();
+            const container = document.getElementById('toast-container');
+            const t = document.createElement('div');
+            t.className = `p-3 rounded-xl text-xs font-bold border ${type === 'success' ? 'bg-emerald-950 border-emerald-400 text-emerald-200' : 'bg-slate-900 border-amber-400 text-amber-200'}`;
+            t.textContent = msg;
+            container.appendChild(t);
+            setTimeout(() => t.remove(), 3500);
+        }
+
+        function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+        // AUTH
+        function switchAuthTab(tab) {
+            if(tab === 'login') {
+                document.getElementById('auth-form-login').classList.remove('hidden');
+                document.getElementById('auth-form-reg').classList.add('hidden');
+                document.getElementById('auth-tab-l').className = "py-2 rounded-lg text-xs font-bold bg-amber-500 text-slate-950";
+                document.getElementById('auth-tab-r').className = "py-2 rounded-lg text-xs font-bold text-slate-300";
+            } else {
+                document.getElementById('auth-form-reg').classList.remove('hidden');
+                document.getElementById('auth-form-login').classList.add('hidden');
+                document.getElementById('auth-tab-r').className = "py-2 rounded-lg text-xs font-bold bg-amber-500 text-slate-950";
+                document.getElementById('auth-tab-l').className = "py-2 rounded-lg text-xs font-bold text-slate-300";
+            }
+        }
+
+        function openClientAuthModal() {
+            switchAuthTab('login');
+            document.getElementById('client-auth-modal').classList.remove('hidden');
+        }
+
+        function handleStrictLogin(e) {
+            e.preventDefault();
+            const phone = document.getElementById('login-phone').value.trim();
+            const pass = document.getElementById('login-pass').value.trim();
+            const client = store.clients[phone];
+            if(!client || client.pass !== pass) {
+                showToast("ভুল মোবাইল নম্বর অথবা পাসওয়ার্ড!", "error");
+                return;
+            }
+            currentUserPhone = phone;
+            localStorage.setItem('rw_current_client_phone', phone);
+            closeModal('client-auth-modal');
+            refreshUI();
+            showToast(`স্বাগতম, ${client.name}!`, "success");
+        }
+
+        function handleStrictRegister(e) {
+            e.preventDefault();
+            const name = document.getElementById('reg-name').value.trim();
+            const phone = document.getElementById('reg-phone').value.trim();
+            const pass = document.getElementById('reg-pass').value.trim();
+            if(store.clients[phone]) {
+                showToast("এই নম্বর দিয়ে ইতিমধ্যে অ্যাকাউন্ট রয়েছে!", "error");
+                return;
+            }
+            store.clients[phone] = { name, phone, pass };
+            currentUserPhone = phone;
+            localStorage.setItem('rw_current_client_phone', phone);
+            persistStore();
+            closeModal('client-auth-modal');
+            refreshUI();
+            showToast("রেজিস্ট্রেশন সফল হয়েছে!", "success");
+        }
+
+        function logoutClient() {
+            currentUserPhone = "";
+            currentSessionId = null;
+            localStorage.removeItem('rw_current_client_phone');
+            document.getElementById('scratch-game-arena').classList.add('hidden');
+            refreshUI();
+            showToast("লগআউট হয়েছে।", "info");
+        }
+
+        // DEPOSIT
+        function openDepositModal(pkgId) {
+            const sel = document.getElementById('dep-pkg');
+            sel.innerHTML = store.packages.map(p => `<option value="${p.id}" ${p.id===pkgId?'selected':''}>${p.name} - ${formatBDT(p.price)}</option>`).join('');
+            if(currentUserPhone && store.clients[currentUserPhone]) {
+                document.getElementById('dep-name').value = store.clients[currentUserPhone].name;
+                document.getElementById('dep-phone').value = currentUserPhone;
+            }
+            document.getElementById('deposit-request-modal').classList.remove('hidden');
+        }
+
+        function submitDepositRequest(e) {
+            e.preventDefault();
+            const pkgId = parseInt(document.getElementById('dep-pkg').value);
+            const name = document.getElementById('dep-name').value.trim();
+            const phone = document.getElementById('dep-phone').value.trim();
+            const trx = document.getElementById('dep-trx').value.trim();
+            const pkg = store.packages.find(p => p.id === pkgId);
+
+            currentUserPhone = phone;
+            localStorage.setItem('rw_current_client_phone', phone);
+
+            store.requests.unshift({ id: 'REQ-'+Date.now(), phone, name, packageName: pkg.name, price: pkg.price, pkgId, trx, status: 'pending', code: '' });
+            
+            if(!store.chats[phone]) store.chats[phone] = { phone, name, unread: 0, messages: [] };
+            store.chats[phone].messages.push({ sender: 'user', text: `ডিপোজিট আবেদন: ${pkg.name} (${formatBDT(pkg.price)}), নোট: ${trx}`, time: new Date().toLocaleTimeString() });
+
+            persistStore();
+            closeModal('deposit-request-modal');
+            refreshUI();
+            showToast("আবেদন সফলভাবে জমা হয়েছে!", "success");
+        }
+
+        // ACTIVATION CODE & SCRATCH
+        function submitActivationCode() {
+            const code = document.getElementById('activation-code-input').value.trim().toUpperCase();
+            if(!code) return showToast("কোড লিখুন।", "error");
+            if(!currentUserPhone) {
+                showToast("প্রথমে লগইন করুন।", "error");
+                openClientAuthModal();
+                return;
+            }
+            const codeObj = store.codes[code];
+            if(!codeObj || codeObj.assignedPhone !== currentUserPhone) {
+                showToast("কোডটি সঠিক নয় অথবা আপনার নয়।", "error");
+                return;
+            }
+            if(codeObj.status === 'used') {
+                showToast("কোডটি ইতিমধ্যে ব্যবহৃত হয়েছে।", "error");
+                return;
+            }
+
+            const pkg = store.packages.find(p => p.id === codeObj.packageId);
+            const targetTotal = Math.floor((Math.random()*(pkg.maxWin - pkg.minWin) + pkg.minWin)/500)*500;
+            const cards = generateCards(pkg.cards, targetTotal);
+            const sesId = 'SES-'+Date.now();
+
+            store.sessions[sesId] = { id: sesId, code, phone: currentUserPhone, packageName: pkg.name, cards, totalWon: 0, withdrawn: false };
+            codeObj.status = 'active';
+            currentSessionId = sesId;
+            persistStore();
+            document.getElementById('activation-code-input').value = '';
+            refreshUI();
+            renderActiveSession();
+            playWinFanfare();
+            triggerFlowerRain();
+            showToast("গেম আনলক হয়েছে! কার্ড ঘষুন।", "success");
+        }
+
+        function generateCards(num, total) {
+            let arr = [];
+            let sum = 0;
+            for(let i=0; i<num; i++) {
+                let w = Math.random()*0.8 + 0.2;
+                arr.push(w);
+                sum += w;
+            }
+            let vals = arr.map(w => Math.floor(((w/sum)*total)/500)*500);
+            vals[0] += (total - vals.reduce((a,b)=>a+b,0));
+            return vals.map((v, i) => ({ index: i, amount: v, revealed: false }));
+        }
+
+        function renderActiveSession() {
+            const arena = document.getElementById('scratch-game-arena');
+            const ses = currentSessionId ? store.sessions[currentSessionId] : null;
+            if(!ses) { arena.classList.add('hidden'); return; }
+            arena.classList.remove('hidden');
+            document.getElementById('active-session-code-badge').textContent = `কোড: ${ses.code}`;
+            document.getElementById('active-pkg-title').textContent = ses.packageName;
+
+            const grid = document.getElementById('scratch-cards-grid');
+            grid.innerHTML = '';
+            ses.cards.forEach((card, idx) => {
+                const wrap = document.createElement('div');
+                wrap.className = 'scratch-card-wrapper h-36 bg-gradient-to-br from-emerald-900 to-slate-900 border-2 border-amber-400/50 flex flex-col items-center justify-center p-3 text-center';
+                wrap.innerHTML = `<span class="text-xs text-amber-300">কার্ড #${toBn(idx+1)}</span><div class="text-xl font-extrabold text-amber-400 my-1">${formatBDT(card.amount)}</div><span class="text-[10px] text-emerald-300">বিজয়ী</span>`;
+                
+                if(!card.revealed) {
+                    const canvas = document.createElement('canvas');
+                    canvas.className = 'scratch-canvas';
+                    canvas.width = 200; canvas.height = 140;
+                    wrap.appendChild(canvas);
+                    initScratch(canvas, ses, idx);
+                }
+                grid.appendChild(wrap);
+            });
+            updateWonAmount(ses);
+        }
+
+        function initScratch(canvas, ses, idx) {
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#b45309';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#fef08a';
+            ctx.font = 'bold 16px "Hind Siliguri"';
+            ctx.textAlign = 'center';
+            ctx.fillText('ঘষতে এখানে ড্রাগ করুন', canvas.width/2, canvas.height/2);
+
+            let drawing = false;
+            function scratch(e) {
+                const rect = canvas.getBoundingClientRect();
+                const x = (e.clientX - rect.left) * (canvas.width / rect.width);
+                const y = (e.clientY - rect.top) * (canvas.height / rect.height);
+                ctx.globalCompositeOperation = 'destination-out';
+                ctx.beginPath();
+                ctx.arc(x, y, 22, 0, Math.PI*2);
+                ctx.fill();
+                playScratchSound();
+
+                // Check cleared
+                const pixels = ctx.getImageData(0,0,canvas.width,canvas.height).data;
+                let cleared = 0;
+                for(let i=3; i<pixels.length; i+=32) if(pixels[i] === 0) cleared++;
+                if(cleared / (pixels.length/32) > 0.4) {
+                    ses.cards[idx].revealed = true;
+                    canvas.style.opacity = '0';
+                    setTimeout(() => canvas.remove(), 300);
+                    updateWonAmount(ses);
+                    playWinFanfare();
+                    triggerFlowerRain(15);
+                    persistStore();
+                }
+            }
+
+            canvas.addEventListener('mousedown', e => { drawing = true; scratch(e); });
+            canvas.addEventListener('mousemove', e => { if(drawing) scratch(e); });
+            window.addEventListener('mouseup', () => drawing = false);
+            canvas.addEventListener('touchstart', e => { drawing = true; scratch(e.touches[0]); e.preventDefault(); });
+            canvas.addEventListener('touchmove', e => { if(drawing) scratch(e.touches[0]); e.preventDefault(); });
+            canvas.addEventListener('touchend', () => drawing = false);
+        }
+
+        function updateWonAmount(ses) {
+            const won = ses.cards.filter(c => c.revealed).reduce((a,b)=>a+b.amount, 0);
+            ses.totalWon = won;
+            document.getElementById('total-won-amount').textContent = formatBDT(won);
+            persistStore();
+        }
+
+        function revealAllCards() {
+            const ses = currentSessionId ? store.sessions[currentSessionId] : null;
+            if(!ses) return;
+            ses.cards.forEach(c => c.revealed = true);
+            updateWonAmount(ses);
+            renderActiveSession();
+            playWinFanfare();
+            triggerFlowerRain(30);
+            showToast("সব কার্ড উন্মুক্ত করা হয়েছে!", "success");
+        }
+
+        // WITHDRAW
+        function openWithdrawModal() {
+            const ses = currentSessionId ? store.sessions[currentSessionId] : null;
+            if(!ses || ses.totalWon <= 0) return showToast("আগে কার্ড ঘষে পুরস্কার জিতুন!", "error");
+            if(currentUserPhone && store.clients[currentUserPhone]) {
+                document.getElementById('wd-name').value = store.clients[currentUserPhone].name;
+                document.getElementById('wd-phone').value = currentUserPhone;
+            }
+            document.getElementById('withdraw-modal').classList.remove('hidden');
+        }
+
+        function submitWithdraw(e) {
+            e.preventDefault();
+            const ses = currentSessionId ? store.sessions[currentSessionId] : null;
+            if(!ses) return;
+            const name = document.getElementById('wd-name').value.trim();
+            const phone = document.getElementById('wd-phone').value.trim();
+            const acc = document.getElementById('wd-acc').value.trim();
+
+            store.withdrawals.unshift({ id: 'WD-'+Date.now(), name, phone, amount: ses.totalWon, acc, status: 'প্রসেসিং' });
+            ses.withdrawn = true;
+            currentSessionId = null;
+            persistStore();
+            closeModal('withdraw-modal');
+            refreshUI();
+            showToast("উইথড্র আবেদন সফল হয়েছে!", "success");
+        }
+
+        // CHAT
+        function toggleChatWidget() {
+            const box = document.getElementById('client-chat-box');
+            box.classList.toggle('hidden');
+            if(!box.classList.contains('hidden')) renderChatMsgs();
+        }
+
+        function sendClientChatMessage(e) {
+            e.preventDefault();
+            const phone = document.getElementById('chat-sender-phone').value.trim() || currentUserPhone;
+            const name = document.getElementById('chat-sender-name').value.trim() || "গ্রাহক";
+            const text = document.getElementById('client-chat-input').value.trim();
+            if(!phone || !text) return;
+
+            if(!store.chats[phone]) store.chats[phone] = { phone, name, unread: 0, messages: [] };
+            store.chats[phone].messages.push({ sender: 'user', text, time: new Date().toLocaleTimeString() });
+            persistStore();
+            document.getElementById('client-chat-input').value = '';
+            renderChatMsgs();
+            showToast("মেসেজ পাঠানো হয়েছে!", "success");
+        }
+
+        function renderChatMsgs() {
+            const phone = currentUserPhone || document.getElementById('chat-sender-phone').value.trim();
+            if(!phone || !store.chats[phone]) return;
+            const container = document.getElementById('client-chat-messages');
+            container.innerHTML = store.chats[phone].messages.map(m => `
+                <div class="flex flex-col ${m.sender === 'user' ? 'items-end' : 'items-start'}">
+                    <div class="p-2.5 rounded-xl max-w-[85%] text-xs ${m.sender==='user'?'bg-amber-500 text-slate-950 font-bold':'bg-slate-800 text-white'}">
+                        ${m.text}
+                    </div>
+                    <span class="text-[9px] text-slate-500 mt-0.5">${m.time}</span>
+                </div>
+            `).join('');
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // ADMIN
+        function openHiddenAdminPortal() {
+            document.getElementById('user-portal-view').classList.add('hidden');
+            document.getElementById('admin-portal-view').classList.remove('hidden');
+            if(isAdminAuthenticated) {
+                document.getElementById('admin-login-gate').classList.add('hidden');
+                document.getElementById('admin-workspace').classList.remove('hidden');
+                renderAdmin();
+            }
+        }
+        function exitHiddenAdminView() {
+            document.getElementById('admin-portal-view').classList.add('hidden');
+            document.getElementById('user-portal-view').classList.remove('hidden');
+            refreshUI();
+        }
+        function loginAdminWithPassword(e) {
+            e.preventDefault();
+            const pass = document.getElementById('admin-secret-password-input').value.trim();
+            if(pass === store.settings.adminPassword) {
+                isAdminAuthenticated = true;
+                sessionStorage.setItem('rw_admin_unlocked', 'true');
+                document.getElementById('admin-login-gate').classList.add('hidden');
+                document.getElementById('admin-workspace').classList.remove('hidden');
+                renderAdmin();
+                showToast("অ্যাডমিন প্যানেল আনলক হয়েছে!", "success");
+            } else {
+                showToast("ভুল পাসওয়ার্ড!", "error");
+            }
+        }
+        function lockAdminSession() {
+            isAdminAuthenticated = false;
+            sessionStorage.removeItem('rw_admin_unlocked');
+            exitHiddenAdminView();
+        }
+
+        function switchAdminTab(t) {
+            ['chat', 'codes', 'withdrawals'].forEach(tab => {
+                document.getElementById(`adm-tab-${tab}`).classList.add('hidden');
+            });
+            document.getElementById(`adm-tab-${t}`).classList.remove('hidden');
+        }
+
+        function renderAdmin() {
+            // Chat threads
+            const list = document.getElementById('adm-chat-threads');
+            list.innerHTML = Object.values(store.chats).map(c => `
+                <div onclick="selectAdminChat('${c.phone}')" class="p-3 rounded-xl bg-slate-900 border border-slate-800 cursor-pointer hover:border-amber-400">
+                    <strong class="text-xs text-white block">${c.name}</strong>
+                    <span class="text-[10px] text-amber-300 font-mono">${c.phone}</span>
+                </div>
+            `).join('');
+
+            // Pkg select
+            document.getElementById('adm-chat-pkg-select').innerHTML = store.packages.map(p => `<option value="${p.id}">${p.name} (${formatBDT(p.price)})</option>`).join('');
+
+            // Requests
+            document.getElementById('adm-requests-tbody').innerHTML = store.requests.map(r => `
+                <tr>
+                    <td class="py-2 px-3">${r.name}<br><span class="font-mono text-amber-300">${r.phone}</span></td>
+                    <td class="py-2 px-3 text-emerald-300">${r.packageName}</td>
+                    <td class="py-2 px-3 text-slate-300">${r.trx}</td>
+                    <td class="py-2 px-3 text-right">
+                        ${r.status==='pending'?`<button onclick="approveReq('${r.id}')" class="btn-gold px-3 py-1 rounded text-xs font-bold">কোড দিন ও অ্যাপ্রুভ</button>`:`<span class="text-emerald-400">সম্পন্ন</span>`}
+                    </td>
+                </tr>
+            `).join('');
+
+            // Withdrawals
+            document.getElementById('adm-withdrawals-tbody').innerHTML = store.withdrawals.map(w => `
+                <tr>
+                    <td class="py-2 px-3">${w.name}<br><span class="font-mono text-amber-300">${w.phone}</span></td>
+                    <td class="py-2 px-3">অ্যাকাউন্ট: ${w.acc}</td>
+                    <td class="py-2 px-3 font-bold text-emerald-400">${formatBDT(w.amount)}</td>
+                    <td class="py-2 px-3 text-right text-amber-300">${w.status}</td>
+                </tr>
+            `).join('');
+        }
+
+        function selectAdminChat(phone) {
+            activeAdminChatPhone = phone;
+            const thread = store.chats[phone];
+            document.getElementById('adm-chat-header').innerHTML = `<strong class="text-white text-xs">${thread.name} (${thread.phone})</strong>`;
+            const box = document.getElementById('adm-chat-messages');
+            box.innerHTML = thread.messages.map(m => `
+                <div class="flex flex-col ${m.sender==='admin'?'items-end':'items-start'}">
+                    <div class="p-2 rounded-xl text-xs max-w-[80%] ${m.sender==='admin'?'bg-emerald-700 text-white':'bg-slate-800 text-slate-100'}">${m.text}</div>
+                    <span class="text-[9px] text-slate-500">${m.time}</span>
+                </div>
+            `).join('');
+            box.scrollTop = box.scrollHeight;
+        }
+
+        // Direct code to specific user's chat box & system
+        function adminGenerateCodeInChat() {
+            if(!activeAdminChatPhone) return showToast("আগে বাঁ পাশ থেকে একজন ইউজার সিলেক্ট করুন।", "error");
+            const pkgId = parseInt(document.getElementById('adm-chat-pkg-select').value);
+            const pkg = store.packages.find(p => p.id === pkgId);
+            const code = `RW-${pkg.price}-${Math.floor(1000 + Math.random()*9000)}`;
+
+            store.codes[code] = { code, packageId: pkg.id, status: 'unused', assignedPhone: activeAdminChatPhone };
+            
+            // Mark pending request as approved if exists
+            const req = store.requests.find(r => r.phone === activeAdminChatPhone && r.status === 'pending');
+            if(req) req.status = 'approved';
+
+            // Push directly to user's chat inbox
+            if(!store.chats[activeAdminChatPhone]) store.chats[activeAdminChatPhone] = { phone: activeAdminChatPhone, name: "গ্রাহক", unread: 0, messages: [] };
+            store.chats[activeAdminChatPhone].messages.push({
+                sender: 'admin',
+                text: `🎟️ অভিনন্দন! আপনার ${pkg.name} এর অ্যাক্টিভেশন কোড জেনারেট করা হয়েছে:\nকোড: ${code}\nএটি দিয়ে হোমপেজ থেকে এখনই খেলা শুরু করুন!`,
+                time: new Date().toLocaleTimeString()
+            });
+
+            persistStore();
+            renderAdmin();
+            selectAdminChat(activeAdminChatPhone);
+            showToast(`কোড ${code} সফলভাবে উক্ত ইউজারের চ্যাট ইনবক্সে পাঠানো হয়েছে!`, "success");
+        }
+
+        function approveReq(id) {
+            const req = store.requests.find(r => r.id === id);
+            if(!req) return;
+            activeAdminChatPhone = req.phone;
+            adminGenerateCodeInChat();
+        }
+
+        function sendAdminChatReply(e) {
+            e.preventDefault();
+            if(!activeAdminChatPhone) return;
+            const text = document.getElementById('adm-chat-reply-input').value.trim();
+            if(!text) return;
+
+            store.chats[activeAdminChatPhone].messages.push({ sender: 'admin', text, time: new Date().toLocaleTimeString() });
+            persistStore();
+            document.getElementById('adm-chat-reply-input').value = '';
+            selectAdminChat(activeAdminChatPhone);
+        }
+
+        // INIT
+        function refreshUI() {
+            document.getElementById('global-notice-text').textContent = store.settings.notice;
+            const client = currentUserPhone ? store.clients[currentUserPhone] : null;
+            const pill = document.getElementById('header-user-pill');
+            const loginBtn = document.getElementById('header-login-btn');
+            
+            if(client) {
+                pill.classList.remove('hidden'); pill.classList.add('flex');
+                loginBtn.classList.add('hidden');
+                document.getElementById('header-user-name').textContent = client.name;
+                document.getElementById('chat-sender-name').value = client.name;
+                document.getElementById('chat-sender-phone').value = client.phone;
+            } else {
+                pill.classList.add('hidden');
+                loginBtn.classList.remove('hidden');
+            }
+
+            // Render packages
+            document.getElementById('packages-grid').innerHTML = store.packages.map(p => `
+                <div class="glass-card rounded-2xl p-5 border border-amber-500/25 flex flex-col justify-between space-y-4">
+                    <div>
+                        <h3 class="text-xl font-bold text-white">${p.name}</h3>
+                        <div class="text-2xl font-extrabold text-amber-300 mt-2">${formatBDT(p.price)}</div>
+                        <p class="text-xs text-slate-300 mt-2">মোট কার্ড: ${toBn(p.cards)} টি</p>
+                    </div>
+                    <button onclick="openDepositModal(${p.id})" class="w-full btn-gold py-3 rounded-xl text-sm font-bold">প্যাকেজ কিনুন ও কোড নিন</button>
+                </div>
+            `).join('');
+
+            // Render withdrawals / requests history for client
+            const wdList = document.getElementById('client-withdrawals-list');
+            const myWds = currentUserPhone ? store.withdrawals.filter(w => w.phone === currentUserPhone) : [];
+            if(myWds.length === 0) {
+                wdList.innerHTML = `<p class="text-xs text-slate-400">কোনো হিস্ট্রি নেই।</p>`;
+            } else {
+                wdList.innerHTML = myWds.map(w => `<div class="p-3 rounded-xl bg-slate-950 text-xs text-white flex justify-between"><span>${w.packageName || 'উইথড্র'} - ${formatBDT(w.amount)}</span><span class="text-amber-300">${w.status}</span></div>`).join('');
+            }
+
+            if(currentSessionId) renderActiveSession();
+            if(typeof lucide !== 'undefined') lucide.createIcons();
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            refreshUI();
+        });
+    </script>
+</body>
+</html>
